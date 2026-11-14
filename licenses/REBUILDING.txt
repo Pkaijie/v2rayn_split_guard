@@ -1,0 +1,31 @@
+Qt / PySide6 组件与替换说明
+
+本程序使用 Qt 6.11.3 的 QtCore、QtGui、QtWidgets、QtSvg 及 PySide6/shiboken6，动态链接。
+原始组件许可文本位于 licenses/Qt；对应版本的原始源代码压缩包随分享包的 sources 目录提供。
+Qt-SOURCES.json 记录来源和文件 SHA-256。本程序没有修改这些第三方库的源代码。
+Fluent System Icons 的原始 MIT 许可另列。Python、psutil、PyInstaller 的许可文本随包提供。
+这些第三方许可与父仓库其他工具的许可相互独立。
+
+允许用户替换、修改和重新链接上述 LGPL 库，并运行替换后的程序；不限制为调试修改后的
+LGPL 组件而进行必要逆向工程等由 LGPL 授予的权利。
+
+单文件 EXE 的默认启动从内置文件释放依赖，不要求接收方安装 Python 或 Qt。
+为支持更换动态库，可使用隐藏的开发参数 --qt-runtime：
+
+  V2rayNSplitGuard.exe --qt-runtime D:\ModifiedQtRuntime
+
+目录结构应为：
+  D:\ModifiedQtRuntime\PySide6\__init__.py、QtCore.pyd、QtGui.pyd、QtWidgets.pyd、QtSvg.pyd
+  D:\ModifiedQtRuntime\PySide6\Qt6Core.dll、Qt6Gui.dll、Qt6Widgets.dll、Qt6Svg.dll 等依赖
+  D:\ModifiedQtRuntime\PySide6\plugins\platforms\qwindows.dll 等插件
+  D:\ModifiedQtRuntime\shiboken6\__init__.py、Shiboken.pyd、运行库等
+
+可将自己构建的、具有兼容 ABI 的 PySide6/shiboken6 wheel 用 pip --target 安装至该目录。
+推荐以随附的 6.11.3 对应源代码为基础构建，保证 Python 3.11 / Windows x64 ABI 兼容。
+参数启用时使用所选运行库的 Python 包、DLL 和插件；不会校验或拒绝用户修改过的库哈希。
+该目录通过进程环境传递给本工具启动的独立管理员工作进程，不改变系统环境变量。
+不要在不了解来源的情况下加载他人提供的动态库。默认未启用替换目录。
+
+开发与重建流程见本工具 README.md。官方 Qt / PySide 构建说明：
+https://doc.qt.io/qt-6/build-sources.html
+https://doc.qt.io/qtforpython-6/building_from_source/index.html

@@ -1,0 +1,39 @@
+# Qt Widgets one-file build. Only the GUI modules actually used are distributed.
+from pathlib import Path
+import sys
+
+root=Path(SPECPATH).resolve().parent
+tools=Path(sys.prefix)
+pinned={}
+for name in ('vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll','msvcp140_1.dll','msvcp140_2.dll',
+             'msvcp140_atomic_wait.dll','msvcp140_codecvt_ids.dll'):
+    source=tools/'Library'/'bin'/name
+    if not source.is_file():raise RuntimeError('Tools runtime missing '+name)
+    pinned[name.lower()]=str(source)
+
+a=Analysis([str(root/'app.py')],pathex=[str(root)],
+    binaries=[(source,'.') for source in pinned.values()],
+    datas=[(str(root/'assets'),'assets'),(str(root/'licenses'),'licenses'),(str(root/'build/Qt_licenses'),'licenses/Qt'),
+           (str(root/'build/ThirdPartyNotices'),'licenses/ThirdParty')],
+    hiddenimports=['PySide6.QtSvg'],
+    excludes=['tkinter','_tkinter','customtkinter','pystray','PIL','PyQt5','PyQt6','PySide2',
+              'numpy','matplotlib','IPython','PySide6.QtQml','PySide6.QtQuick','PySide6.QtWebEngineCore',
+              'PySide6.QtPdf','PySide6.QtMultimedia','PySide6.QtNetwork'],
+    runtime_hooks=[str(root/'scripts/qt_runtime_override.py')],noarchive=False,optimize=0)
+
+# QtGui's generic hook finds image plugins that this app never uses. Retain only
+# ICO/SVG and the Windows platform plugin, avoiding unrelated Qt add-on modules.
+qt_dlls={'qt6core.dll','qt6gui.dll','qt6widgets.dll','qt6svg.dll'}
+plugins={'qwindows.dll','qico.dll','qsvg.dll','qsvgicon.dll'}
+filtered=[]
+for dest,source,kind in a.binaries:
+    name=Path(dest).name.lower();parts=dest.replace('\\','/').lower()
+    if name.startswith('qt6') and name.endswith('.dll') and name not in qt_dlls:continue
+    if '/plugins/' in parts and name not in plugins:continue
+    filtered.append((dest,pinned.get(name,source),kind))
+a.binaries=filtered
+a.datas=[item for item in a.datas if '/translations/' not in item[0].replace('\\','/').lower()]
+pyz=PYZ(a.pure)
+exe=EXE(pyz,a.scripts,a.binaries,a.datas,[],name='V2rayNSplitGuard',console=False,
+    debug=False,strip=False,upx=False,disable_windowed_traceback=False,
+    icon=str(root/'assets/app.ico'),version=str(root/'build/windows-version.txt'))
