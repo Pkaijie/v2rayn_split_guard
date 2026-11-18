@@ -1,16 +1,34 @@
-"""Generate the app's typographic mark using the Windows installed font."""
+"""Render the route split mark into the Windows application and tray icon."""
 from pathlib import Path
-import os
-from PIL import Image,ImageDraw,ImageFont
 
-root=Path(__file__).resolve().parent.parent
-out=root/'assets';out.mkdir(exist_ok=True)
-image=Image.new('RGBA',(256,256),(0,0,0,0))
-draw=ImageDraw.Draw(image)
-draw.rounded_rectangle((0,0,255,255),radius=48,fill='#142E35')
-font=ImageFont.truetype(str(Path(os.environ['WINDIR'])/'Fonts'/'segoeuib.ttf'),144)
-draw.text((43,18),'S',fill='#7EE0C4',font=font)
-draw.line((171,191,207,66),fill='#7EE0C4',width=12)
-image.save(out/'app.ico',sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)])
+from PIL import Image
+from PySide6.QtGui import QImage, QPainter
+from PySide6.QtSvg import QSvgRenderer
 
-# Navigation uses the licensed SVG sources in assets/; no installed icon font is needed.
+
+ASSETS = Path(__file__).resolve().parent.parent / 'assets'
+ICON_SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)
+
+
+def main():
+    renderer = QSvgRenderer(str(ASSETS / 'app-icon.svg'))
+    if not renderer.isValid():
+        raise ValueError('Cannot render assets/app-icon.svg')
+
+    # Supersample the vector once, then let Pillow resample each ICO frame.
+    resolution = 1024
+    canvas = QImage(resolution, resolution, QImage.Format.Format_RGBA8888)
+    canvas.fill(0)
+    painter = QPainter(canvas)
+    try:
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        renderer.render(painter)
+    finally:
+        painter.end()
+
+    image = Image.frombytes('RGBA', (resolution, resolution), bytes(canvas.constBits()))
+    image.save(ASSETS / 'app.ico', sizes=[(size, size) for size in ICON_SIZES])
+
+
+if __name__ == '__main__':
+    main()

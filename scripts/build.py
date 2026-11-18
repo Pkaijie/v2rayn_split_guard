@@ -25,7 +25,7 @@ def main():
         tools,tools/'Library/bin',tools/'Scripts',windows/'System32',windows))
     for key in ('PYTHONHOME','PYTHONPATH','TCL_LIBRARY','TK_LIBRARY'):
         os.environ.pop(key,None)
-    runpy.run_path(str(root/'scripts/make_icon.py'))
+    runpy.run_path(str(root/'scripts/make_icon.py'), run_name='__main__')
     runpy.run_path(str(root/'scripts/gather_notices.py'))['collect']()
     build=root/'build';build.mkdir(exist_ok=True)
     spec=build/'portable.spec'
