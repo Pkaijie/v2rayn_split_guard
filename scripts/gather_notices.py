@@ -8,7 +8,7 @@ ROOT=Path(__file__).resolve().parent.parent
 
 def collect():
     target=ROOT/'build'/'ThirdPartyNotices';target.mkdir(parents=True,exist_ok=True)
-    for name in ('psutil','PyInstaller'):
+    for name in ('psutil','PyInstaller','PyYAML','json5'):
         dist=distribution(name)
         for item in dist.files:
             if 'license' not in str(item).lower() and item.name!='COPYING.txt':continue

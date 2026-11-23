@@ -113,6 +113,7 @@ def fault_snapshot(report, proxy):
         ('未识别代理节点', 'node_missing', '代理节点未确认'),
         ('节点域名解析失败', 'dns_failure', '节点域名解析失败'),
         ('127.0.0.1:10808', 'listener_missing', '代理监听不存在'),
+        ('代理监听', 'listener_missing', '代理监听未就绪'),
         ('节点选路未经过 WLAN', 'route_not_wlan', '节点选路未经过 WLAN'),
         ('节点专用路由缺失或网关不匹配', 'route_gateway', '节点专用路由待维护'),
     )

@@ -11,18 +11,37 @@ import PySide6
 from PySide6 import QtCore,QtGui,QtWidgets,QtSvg
 import shiboken6
 import psutil
+import yaml
+import json5
 from .common import VERSION,ps_json,run as command
 from .qtcheck import smoke
 from .elevation import fresh_worker_environment
+from .nodes import read_runtime
+from .standalone import brook_profile
 
 
 def run():
     bundled=bool(getattr(sys,'frozen',False));resources=Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parent.parent))
     if bundled:
-        for module in (PySide6,QtCore,QtGui,QtWidgets,QtSvg,shiboken6,psutil):
+        for module in (PySide6,QtCore,QtGui,QtWidgets,QtSvg,shiboken6,psutil,yaml,json5):
             assert Path(module.__file__).resolve().is_relative_to(resources)
         assert all(Path(p).resolve().is_relative_to(resources) for p in sys.path)
     ui=smoke(real_tray=True)
+    with tempfile.TemporaryDirectory(prefix='split-guard-yaml-') as tmp:
+        config = Path(tmp)/'config.yaml'
+        config.write_text('mixed-port: 17890\nproxies:\n  - {name: Example, type: ss, server: 203.0.113.10, port: 443}\n',
+                          encoding='utf-8')
+        profile = read_runtime(config)
+        assert profile.family == 'clash' and profile.socks_ports == (17890,)
+        assert len(profile.nodes) == 1 and profile.nodes[0].host == '203.0.113.10'
+        config = Path(tmp)/'client.json5'
+        config.write_text("{server: '203.0.113.11:443', local: {server: '127.0.0.1:17891',},}",
+                          encoding='utf-8')
+        profile = read_runtime(config)
+        assert profile.family == 'tuic' and profile.socks_ports == (17891,)
+        assert len(profile.nodes) == 1 and profile.nodes[0].transport == 'UDP'
+        brook = brook_profile(['brook.exe', 'client', '--server', '203.0.113.12:443'])
+        assert brook is not None and brook.nodes[0].host == '203.0.113.12'
     if bundled:
         kernel=ctypes.WinDLL('kernel32',use_last_error=True)
         kernel.GetModuleHandleW.argtypes=[ctypes.c_wchar_p];kernel.GetModuleHandleW.restype=ctypes.c_void_p
@@ -40,5 +59,6 @@ def run():
     assert system['nettcpip'] and 'curl' in command(['curl.exe','--version'],10).lower()
     return dict(ok=True,version=VERSION,frozen=bundled,bits=struct.calcsize('P')*8,python=sys.version.split()[0],
         ui='PySide6 / Qt Widgets',qt=QtCore.qVersion(),bundled_imports_only=bundled,
-        runtime_dlls_bundled=bundled,independent_child_verified=bundled,full_window=True,real_tray=True,
+        runtime_dlls_bundled=bundled,independent_child_verified=bundled,clash_yaml_verified=True,
+        standalone_profiles_verified=True,full_window=True,real_tray=True,
         ui_checks=ui['passed'],system_tools=system,network_writes=0)

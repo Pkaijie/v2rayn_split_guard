@@ -8,7 +8,8 @@ import unittest
 from unittest.mock import Mock, patch
 
 import psutil
-from guard.discovery import config_arguments, discover_runtime, runtime_file, MAX_BYTES
+from guard.discovery import config_arguments, discover_runtime, runtime_file
+from guard.nodes import MAX_BYTES
 
 
 def process(pid, name, exe='', args=(), cwd='', parent=0):
@@ -31,8 +32,9 @@ class DiscoveryTests(unittest.TestCase):
         return path.resolve()
 
     def discover(self, processes, listener=None, **kw):
+        listeners = {listener.get('port', 10808):listener} if listener else {}
         with patch('guard.discovery.psutil.process_iter',return_value=processes), \
-             patch('guard.discovery.proxy_listener',return_value=listener):
+             patch('guard.discovery.local_proxy_listeners',return_value=listeners):
             return discover_runtime(**kw)
 
     def core(self, pid=20, path=None, parent=0):
@@ -117,7 +119,7 @@ class DiscoveryTests(unittest.TestCase):
     def test_no_process_or_config_gives_manual_guidance(self):
         result=self.discover([])
         self.assertFalse(result['candidates'])
-        self.assertIn('启动 v2rayN',' '.join(result['notes']))
+        self.assertIn('启动代理客户端',' '.join(result['notes']))
 
     def test_gui_json_malformed_large_and_missing_files_are_rejected(self):
         gui=self.write('guiNConfig.json',dict(coreType=1))
@@ -135,7 +137,7 @@ class DiscoveryTests(unittest.TestCase):
     def test_unc_and_device_arguments_are_not_probed(self):
         for path in (r'\\server\share\config.json',r'\\.\pipe\config.json'):
             core=self.core(path=path)
-            with patch('guard.discovery.runtime_file') as validate:
+            with patch('guard.discovery.runtime_metadata') as validate:
                 result=self.discover([core],dict(pid=20))
             self.assertFalse(result['candidates'])
             validate.assert_not_called()

@@ -6,7 +6,7 @@ import tempfile
 import time
 import unittest
 from unittest.mock import patch
-from guard.nodes import parse_config,make_node,valid_host
+from guard.nodes import RuntimeProfile,parse_config,make_node,valid_host
 from guard.network import inspect_routes,route_key,wlan_info,check
 from guard.routes import plan_routes,execute,restore_plan,validate_route,identity
 
@@ -95,7 +95,8 @@ class StateTests(unittest.TestCase):
         from guard.common import DEFAULTS
         n=dict(interfaces=[dict(InterfaceAlias='WLAN',InterfaceIndex=7,ConnectionState=1)],addresses=[],
                routes=[dict(route(),prefix='0.0.0.0/0')])
-        with patch('guard.network.read_nodes',return_value=([make_node('proxy','192.0.2.1',443,'trojan','TCP')],[])),patch('guard.network.snapshot',return_value=n),patch('guard.network.resolve',return_value=['192.0.2.1']),patch('guard.network.selected_routes',return_value={'192.0.2.1':[route('192.0.2.1')]}),patch('guard.network.proxy_listener',return_value={'pid':1}):
+        profile = RuntimeProfile('outbounds', [make_node('proxy','192.0.2.1',443,'trojan','TCP')], [], (10808,))
+        with patch('guard.network.read_runtime',return_value=profile),patch('guard.network.snapshot',return_value=n),patch('guard.network.resolve',return_value=['192.0.2.1']),patch('guard.network.selected_routes',return_value={'192.0.2.1':[route('192.0.2.1')]}),patch('guard.network.proxy_listener',return_value={'pid':1}):
             x=check(DEFAULTS)
         self.assertFalse(x['company']);self.assertFalse(any('PPPoE' in f for f in x['faults']))
 
@@ -161,6 +162,16 @@ class TransactionTests(unittest.TestCase):
         with patch('guard.nodes.read_nodes',return_value=([],[])):
             with self.assertRaisesRegex(ValueError,'节点配置'):execute(p,b,check_wlan=True)
         self.assertFalse(b.mutations)
+    def test_unreadable_runtime_aborts_without_exposing_its_path(self):
+        private = 'example-private-profile.yaml'
+        plan = plan_routes(report(), {'runtime': private}, [])
+        backend = FakeBackend([])
+        with patch('guard.nodes.read_nodes', side_effect=FileNotFoundError(private)):
+            with self.assertRaisesRegex(ValueError, '无法重新核对运行节点') as error:
+                execute(plan, backend, check_wlan=True)
+        self.assertNotIn(private, str(error.exception))
+        self.assertTrue(error.exception.__suppress_context__)
+        self.assertFalse(backend.mutations)
     def test_dns_change_aborts_before_mutation(self):
         p=plan_routes(report(),{'runtime':'fake.json','manual':True},[]);b=FakeBackend([])
         with patch('guard.nodes.resolve',return_value=['198.51.100.8']):

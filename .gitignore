@@ -43,6 +43,15 @@ wrong_book.json
 process_killer_config.json
 guiNConfig.json
 config.json
+config.json5
+config.yaml
+config.yml
+config.toml
+client.json
+client.json5
+client.yaml
+client.yml
+client.toml
 *.xlsx
 *.xls
 *.xlsm

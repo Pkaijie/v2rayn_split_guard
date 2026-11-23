@@ -41,6 +41,8 @@ def run(executable):
             return result
         runtime=launch(['--runtime-self-test'],home/'runtime.json')
         assert runtime['frozen'] and runtime['bundled_imports_only'] and runtime['bits']==64
+        assert runtime['clash_yaml_verified']
+        assert runtime['standalone_profiles_verified']
         results.append(dict(scenario='isolated_runtime',result=runtime))
         for scenario in SCENARIOS:
             result=launch(['--exit-self-test',scenario],home/f'exit-{scenario}.json')

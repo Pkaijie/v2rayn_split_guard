@@ -169,7 +169,10 @@ def execute(plan, backend=None, backup_dir=None, check_wlan=True, ledger_path=No
         guard=plan.get('node_guard',{})
         if guard.get('runtime'):
             if not guard['manual']:
-                nodes,_=stage('重新确认运行节点',lambda:read_nodes(guard['runtime']),stop,progress)
+                try:
+                    nodes,_=stage('重新确认运行节点',lambda:read_nodes(guard['runtime']),stop,progress)
+                except (OSError, ValueError, TypeError):
+                    raise ValueError('无法重新核对运行节点，请检查配置来源或重新检测') from None
                 selected=next((n.to_dict() for n in nodes if n.tag==guard['node']['tag']),None)
                 if selected!=guard['node']:
                     raise ValueError('运行节点配置在预览后变化，请重新检查')

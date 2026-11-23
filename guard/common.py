@@ -11,12 +11,13 @@ import subprocess
 import threading
 import time
 
-VERSION = '3.0.1'
+VERSION = '3.2.0'
+DEFAULT_PROXY_PORT = 10808
 DATA = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'V2rayNSplitGuard'
 DEFAULTS = dict(runtime='', gui='',
                 wlan='WLAN', company='PPPoE', interval=15, cooldown=120,
                 manual=False, host='', port=443, protocol='手动', transport='UDP',
-                tag='', gateway='', gateway6='', auto_proxy=False, close_action='ask')
+                tag='', gateway='', gateway6='', proxy_port=0, auto_proxy=False, close_action='ask')
 
 
 def timestamp():

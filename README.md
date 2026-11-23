@@ -1,4 +1,4 @@
-# v2rayN 分流助手 3.0.1 / v2rayN Split Guard 3.0.1
+# v2rayN 分流助手 3.2.0 / v2rayN Split Guard 3.2.0
 
 [中文](#chinese) | [English](#english)
 
@@ -12,13 +12,13 @@
 
 ### 直接启动
 
-双击 `启动工具.cmd` 或 `dist/V2rayNSplitGuard.exe`。单个 EXE 内含 Python、Qt、PySide6、psutil、图标和所需运行库，接收方无需安装 Python、Conda、Qt 或 VC 运行库。首次启动会释放内置依赖到临时目录，退出后清理。
+双击 `启动工具.cmd` 或 `dist/V2rayNSplitGuard.exe`。单个 EXE 内含 Python、Qt、PySide6、psutil、PyYAML、图标和所需运行库，接收方无需安装 Python、Conda、Qt 或 VC 运行库。首次启动会释放内置依赖到临时目录，退出后清理。
 
-目标系统为 Windows 10/11 64 位。诊断仍使用系统自带 Windows PowerShell / NetTCPIP、netsh 和 curl.exe。v2rayN、节点和订阅由使用者自行准备。系统组件缺失或受策略限制时，相应检查可能不可用。
+目标系统为 Windows 10/11 64 位。诊断使用系统自带 Windows PowerShell / NetTCPIP、netsh 和 curl.exe。代理客户端、节点和订阅由使用者自行准备。系统组件缺失或受策略限制时，相应检查可能不可用。
 
-分发包为 `release/V2rayNSplitGuard-3.0.1-windows-x64.zip`，包含 EXE、说明、验证记录、第三方许可及 Qt/PySide6 对应源代码。`sources/` 和 `licenses/` 不参与常规启动；分享时请保留完整分发资料。本机设置、日志、路由备份不包含在包内。
+分发包为 `release/V2rayNSplitGuard-3.2.0-windows-x64.zip`，包含 EXE、说明、验证记录、第三方许可及 Qt/PySide6 对应源代码。分享时请保留完整分发资料。
 
-上一版 `release/V2rayNSplitGuard-3.0.0-windows-x64.zip` 和 2.0.8 分发包保留用于回退。新旧版使用相同数据格式和目录，切换版本前先退出另一个版本。
+3.2.0 新增 **Hysteria 2、NaiveProxy、TUIC、Juicity、Brook、OverTLS、ShadowQUIC** 独立客户端适配。继续读取 Xray、sing-box 和 Clash / Mihomo 的运行配置，同时验证 V2Fly V5 常见 JSON 出站和 SOCKS 入站。
 
 3.0.1 改善路由操作等待：点击“应用 / 修复路由”或“核验 / 保存接管选择”后立即显示阶段、耗时及进度动画。只读阶段可取消；包含实际路由变更的任务会等待完成或回滚。没有变更时重新核对节点、DNS、WLAN 及两个路由存储，跳过重复的路由写入流程；有管理范围变更时仍先备份。诊断日志包含固定阶段名称及耗时，不增加凭证或完整配置记录。
 
@@ -33,14 +33,18 @@
 
 ### 首次配置
 
-1. 启动已配置好节点的 v2rayN，连接需要使用的网络。
-2. 在高级设置点击“自动检测”运行配置路径。优先识别本地 10808 监听核心的参数，其次识别 v2rayN 子进程，再检查程序目录。
-3. 唯一且可确认的加载配置填入草稿；多实例、独立核心、目录候选或合并配置需选择并“采用所选”。也可手动浏览 `binConfigs/config.json`。
+1. 启动已配置好节点的代理客户端，连接需要使用的网络。
+2. 在高级设置点击“自动检测”运行配置路径。工具优先采用能与本地监听进程关联的配置。Clash / Mihomo 支持读取核心参数 `-f` 或 `-d` 指向的 YAML。
+3. 唯一且可确认的配置填入草稿。多个候选时，请核对后点击“采用所选”。也可手动选择 v2rayN 的 `binConfigs/config.json` 或 Clash / Mihomo 当前使用的 `.yaml`、`.yml`。
 4. 设置该机实际的 WLAN 网卡名称和公司拨号连接名称，保存；网关留空即实时读取。
 5. 立即检查，选择需要维护的代理出站；必要时勾选手动输入，填写节点地址、当前端口、协议及 TCP/UDP，再应用输入。
 6. 需要路由维护时点击“应用 / 修复路由”，逐项核对变更预览并确认。
 
 配置检测在后台执行，不全盘搜索，不探测 UNC 共享，不自动提权。检测期间手动编辑的路径不会被结果覆盖；放弃设置会使未完成检测的旧结果失效。不会复制或记录完整配置及进程命令行。
+
+Clash / Mihomo 有代理组、多个候选或链式配置时，请先在代理客户端核对实际连接的第一跳，再选择对应节点。自动切换后请更新选择。外部节点提供者的节点由客户端解析，需要时可手动填写第一跳；工具不会读取提供者的外部文件或下载订阅。
+
+独立核心可通过「自动检测」选取运行配置，也可手动选择相应的 YAML、JSON、JSON5 或 TOML 文件。TUIC 支持旧版 `relay` 结构和新版客户端结构。Brook 从选中的进程读取常见客户端参数或 Brook 链接，重启 Brook 后需重新检测并保存。Hysteria Realms、外部脚本选路、命令行覆盖或无法确认第一跳的多跳配置需手动核对节点。
 
 ### 状态与提醒
 
@@ -48,7 +52,7 @@
 
 “路由分流正常”仅表示系统对当前节点地址的选路经过 WLAN，专用主机路由与当前网关匹配，ActiveStore / PersistentStore 均存在。此结果是路由证据，不是抓包或实际网卡出口证明。
 
-点击“测试代理”通过 `socks5h://127.0.0.1:10808` 发起 HTTPS 请求，连接超时 5 秒、总超时 12 秒，显示测试站点返回的公网 IP。默认不周期性请求公网；开启“每 60 秒测试代理”后才自动测试。配置、网络或路由变化会使旧测试结果失效，不把失效当成恢复。
+点击“测试代理”会通过本机 SOCKS5 或混合端口发起 HTTPS 请求，连接超时 5 秒、总超时 12 秒，显示测试站点返回的公网 IP。自动模式读取配置中的端口，Clash / Mihomo 优先使用正在监听的 `mixed-port`，其次使用 `socks-port`。无运行配置或旧式出站 JSON 缺少入站列表时使用 10808。高级设置可手动指定本地端口。测试适用于无需认证的本机 SOCKS5 或混合监听。开启“每 60 秒测试代理”后才定期请求公网。配置、网络或路由变化会使旧测试结果失效。
 
 后台故障和网关/节点/DNS 变化统一并入提醒摘要。未读批次最多发送一次系统提醒或打开一个非模态摘要窗口，后续只更新状态，不排队补弹。无托盘消息时自动摘要 20 秒收起并保留未读；手动查看取消自动收起。关闭摘要或点击“知道了”视为知晓当前提醒，持续故障仍显示但不重复提醒。确认恢复后再发生、新故障或新配置变化，受默认 120 秒全局冷却限制。最多保留 50 类记录，退出清空。
 
@@ -76,7 +80,7 @@
 
 日志不记录密码、认证、订阅、完整配置或访问内容。必要的节点域名/IP、网关及公网 IP 仍属于本机诊断信息，分享前应核对。迁移不会自动重写现有设置；前端选择改变也不会自动写路由。
 
-回退：退出当前版本，解压 3.0.0 或 2.0.8 分发包到另一目录启动即可继续读取原数据。路由恢复通过备份恢复页选择 JSON、核对预览后执行；若当前记录与备份的操作后状态不同，会拒绝覆盖外部变更。
+回退时先退出当前版本，再启动旧版。旧版可继续读取原数据；如果已切换到 YAML，则需在旧版重新选择 JSON 配置或手动输入节点。路由恢复通过备份恢复页选择 JSON、核对预览后执行；若当前记录与备份的操作后状态不同，会拒绝覆盖外部变更。
 
 ### 开发与构建
 
@@ -114,15 +118,15 @@ A Windows network diagnostic and proxy-node route maintenance application with a
 
 ### Run a packaged build
 
-Double-click `启动工具.cmd` or `dist/V2rayNSplitGuard.exe`. The single-file executable bundles Python, Qt, PySide6, psutil, icons, and the required runtime libraries. Recipients do not need to install Python, Conda, Qt, or the VC runtime. Startup extracts the bundled dependencies to a temporary directory, which is cleaned up on exit.
+Double-click `启动工具.cmd` or `dist/V2rayNSplitGuard.exe`. The single-file executable bundles Python, Qt, PySide6, psutil, PyYAML, icons, and the required runtime libraries. Recipients do not need to install Python, Conda, Qt, or the VC runtime. Startup extracts the bundled dependencies to a temporary directory, which is cleaned up on exit.
 
-The target platform is Windows 10/11 x64. Diagnostics use the system's Windows PowerShell / NetTCPIP, netsh, and curl.exe. Supply your own v2rayN installation, nodes, and subscriptions. Missing system components or restrictive policies may make individual checks unavailable.
+The target platform is Windows 10/11 x64. Diagnostics use the system's Windows PowerShell / NetTCPIP, netsh, and curl.exe. Supply your own proxy client, nodes, and subscriptions. Missing system components or restrictive policies may make individual checks unavailable.
 
 This Git repository contains source code. The `dist/`, `release/`, and `artifacts/` directories below refer to local build outputs and are not included in Git.
 
-The distribution archive is `release/V2rayNSplitGuard-3.0.1-windows-x64.zip`. It contains the EXE, instructions, validation record, third-party notices, and corresponding Qt/PySide6 sources. The `sources/` and `licenses/` materials are not needed during normal startup, but should be retained when redistributing the package. Personal settings, logs, and route backups are excluded.
+The distribution archive is `release/V2rayNSplitGuard-3.2.0-windows-x64.zip`. It contains the EXE, instructions, validation record, third-party notices, and corresponding Qt/PySide6 sources. Keep the `sources/` and `licenses/` materials when redistributing the package.
 
-Previously built 3.0.0 and 2.0.8 packages can be retained for rollback. The data format and directory remain compatible; exit one version before starting another.
+Version 3.2.0 adds support for standalone **Hysteria 2, NaiveProxy, TUIC, Juicity, Brook, OverTLS, and ShadowQUIC** clients. It retains Xray, sing-box, and Clash / Mihomo support and covers common V2Fly V5 JSON outbounds and SOCKS inbounds.
 
 In 3.0.1, route preview and verification display the current stage, elapsed time, and an activity indicator immediately. Read-only checks can be cancelled. Tasks containing route changes wait for completion or rollback. A no-change operation revalidates the node, DNS, WLAN, and both route stores without repeating the write workflow; management-record changes still receive a backup. Diagnostic logs add fixed stage names and timings without credentials or full configurations.
 
@@ -137,14 +141,18 @@ The sidebar contains monitoring controls, the interval, reminder summary, and ve
 
 ### First-time setup
 
-1. Start v2rayN with a configured node and connect the networks you intend to use.
-2. In Advanced settings, automatically detect the runtime configuration path. Detection prioritizes the core listening on local port 10808, then v2rayN child processes, then application directories.
-3. A unique, confirmed loaded configuration is filled into the draft. Multiple instances, standalone cores, directory candidates, or merged configurations require reviewing a candidate and choosing Adopt selected. You can also browse to `binConfigs/config.json` manually.
+1. Start your proxy client with a configured node and connect the networks you intend to use.
+2. In Advanced settings, automatically detect the runtime configuration path. Detection prioritizes configurations associated with a local listener. It reads Clash / Mihomo core arguments `-f` or `-d` to locate YAML.
+3. A unique, confirmed configuration is filled into the draft. If several candidates appear, review them and choose Adopt selected. You can also browse to v2rayN's `binConfigs/config.json` or the `.yaml` / `.yml` file currently used by Clash / Mihomo.
 4. Enter this computer's actual WLAN adapter name and company dial-up connection name, then save. Leave gateways blank to read them dynamically.
 5. Run an immediate check and choose the proxy outbound to maintain. If necessary, enable manual input and enter the node address, current port, protocol, and TCP/UDP transport, then apply the input.
 6. When maintenance is needed, choose Apply / repair routes, review each proposed change, and confirm explicitly.
 
 Detection runs in the background. It does not search entire disks, probe UNC shares, or elevate automatically. Results do not overwrite paths edited during detection, and discarding settings invalidates pending results. Full configurations and process command lines are neither copied nor logged.
+
+For proxy groups, multiple candidates, or chained configurations, confirm the first hop in the Clash / Mihomo client and select the corresponding node. Update the selection if the client switches nodes. For external providers, enter the first hop manually when needed. Split Guard leaves provider files and subscription downloads to the proxy client.
+
+For standalone cores, use automatic detection or choose the active YAML, JSON, JSON5, or TOML configuration. TUIC supports the older `relay` configuration and the current client structure. Brook reads common client arguments or Brook links from the selected process. Detect and save the source again after restarting Brook. Confirm the first hop manually for Hysteria Realms, routing scripts, command-line overrides, or multi-hop setups with an ambiguous first hop.
 
 ### Status, testing, and reminders
 
@@ -152,7 +160,7 @@ Monitoring is enabled by default and checks approximately every 15 seconds, plus
 
 “路由分流正常” means the system selects WLAN for the current node addresses, the dedicated host routes match the current gateway, and both ActiveStore and PersistentStore entries exist. This is route evidence, not packet-capture proof of the physical egress interface.
 
-Test proxy sends an HTTPS request through `socks5h://127.0.0.1:10808`, with a 5-second connection timeout and a 12-second total limit. It displays the public IP returned by the test service. Periodic public requests are off by default; enable the 60-second proxy test explicitly to use them. Configuration, network, or route changes invalidate old results without treating invalidation as recovery.
+Test proxy sends an HTTPS request through an unauthenticated local SOCKS5 or mixed listener, with a 5-second connection timeout and a 12-second total limit. It displays the public IP returned by the test service. Automatic mode reads ports from the configuration and prefers the listening `mixed-port` over `socks-port` for Clash / Mihomo. Port 10808 remains the fallback for a blank configuration or legacy outbound JSON without an inbound list. Advanced settings also accepts a manual port. Enable the 60-second proxy test to run periodic public requests. Configuration, network, or route changes invalidate old results.
 
 Background faults and gateway/node/DNS changes are merged into the reminder summary. An unread batch produces at most one system notification or one nonmodal summary window; later checks update it without queuing popups. When tray messages are unavailable, an automatic summary closes after 20 seconds while retaining unread state. Opening it manually cancels that timer. Closing or acknowledging the summary acknowledges the current reminders, so an ongoing fault remains visible without repeated alerts. A confirmed recovery followed by recurrence, a new fault, or a new configuration event can notify again, subject to the default 120-second global cooldown. At most 50 categories are retained; they are cleared on exit.
 
@@ -180,7 +188,7 @@ The data directory remains `%LOCALAPPDATA%/V2rayNSplitGuard`:
 
 Logs exclude passwords, authentication data, subscriptions, full configurations, and visited content. Necessary node domains/IPs, gateways, and public IPs remain local diagnostic information and should be reviewed before sharing. The frontend migration does not automatically rewrite existing settings or apply route changes.
 
-To roll back, exit the current version and run a previously built 3.0.0 or 2.0.8 package from another directory using the existing data. To restore routes, choose a JSON backup, review the preview, and confirm. If current records differ from the backup's post-operation state, the tool refuses to overwrite external changes.
+To roll back, exit the current version and run an older build using the existing data. If you switched to YAML, select a JSON configuration or enter the node manually in the older build. To restore routes, choose a JSON backup, review the preview, and confirm. If current records differ from the backup's post-operation state, the tool refuses to overwrite external changes.
 
 ### Develop and build
 

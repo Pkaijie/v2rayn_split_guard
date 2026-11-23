@@ -29,7 +29,8 @@ class RuntimeConfigPicker(QWidget):
         self.hint.setText('检测结果仅填入草稿，保存设置后生效。');set_color(self.hint,MUTED,12)
 
     def browse(self):
-        chosen,_=QFileDialog.getOpenFileName(self,'选择 v2rayN 运行配置','','JSON 文件 (*.json)')
+        chosen,_=QFileDialog.getOpenFileName(
+            self,'选择代理核心运行配置','','运行配置 (*.json *.json5 *.yaml *.yml *.toml);;所有文件 (*)')
         if chosen:self.path.setText(chosen)
 
     def detect(self):

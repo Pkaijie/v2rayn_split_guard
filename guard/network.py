@@ -1,8 +1,9 @@
 from __future__ import annotations
 import ipaddress
 import json
-from .common import ps_json, quote, array, timestamp, run,stage,OperationCancelled
-from .nodes import read_nodes, resolve, make_node
+from .common import DEFAULT_PROXY_PORT, ps_json, quote, array, timestamp, run,stage,OperationCancelled
+from .nodes import port_number, read_runtime, resolve, make_node
+from .standalone import brook_pid
 
 ROUTE_FIELDS = 'DestinationPrefix,InterfaceIndex,InterfaceAlias,NextHop,RouteMetric,InterfaceMetric,Protocol'
 
@@ -76,12 +77,51 @@ def selected_routes(addresses, stop=None):
     return {ip: [normalize_route(r, 'ActiveStore') for r in array(d.get(ip))] for ip in addresses}
 
 
-def proxy_listener():
+def local_proxy_listeners(*, pid=None):
+    """Read the TCP table once and prefer IPv4 when both loopbacks are available."""
     import psutil
-    for c in psutil.net_connections(kind='tcp'):
-        if c.status=='LISTEN' and c.laddr.port==10808 and c.laddr.ip in ('127.0.0.1','0.0.0.0','::'):
-            return dict(pid=c.pid, address=c.laddr.ip, port=10808)
-    return None
+    hosts = {'127.0.0.1': '127.0.0.1', '0.0.0.0': '127.0.0.1', '::1': '::1', '::': '::1'}
+    listeners = {}
+    for connection in psutil.net_connections(kind='tcp'):
+        if connection.status != psutil.CONN_LISTEN or not connection.laddr:
+            continue
+        if pid is not None and connection.pid != pid:
+            continue
+        address, port = connection.laddr
+        host = hosts.get(address)
+        previous = listeners.get(port)
+        if host is not None and (previous is None or (previous['host'] == '::1' and host == '127.0.0.1')):
+            listeners[port] = dict(pid=connection.pid, address=address, port=port, host=host)
+    return listeners
+
+
+def proxy_listener(ports=(DEFAULT_PROXY_PORT,), *, pid=None):
+    if not ports:
+        return None
+    listeners = local_proxy_listeners() if pid is None else local_proxy_listeners(pid=pid)
+    return next((listeners[port] for port in ports if port in listeners), None)
+
+
+def proxy_ports(config, profile):
+    if profile is None and brook_pid(config.get('runtime')):
+        return ()
+    override = port_number(config.get('proxy_port'))
+    if override is not None:
+        return (override,)
+    if profile is not None:
+        return profile.socks_ports
+    if config.get('runtime'):
+        return ()
+    return (DEFAULT_PROXY_PORT,)
+
+
+def proxy_address(host, port):
+    return f'[{host}]:{port}' if ':' in host else f'{host}:{port}'
+
+
+def configured_listener(ports, config):
+    pid = brook_pid(config.get('runtime'))
+    return proxy_listener(ports, pid=pid) if pid else proxy_listener(ports)
 
 
 def inspect_routes(addresses, net, wlan, selected):
@@ -104,16 +144,22 @@ def inspect_routes(addresses, net, wlan, selected):
 
 def check(config, stop=None, progress=None):
     warnings = []
+    profile = None
     try:
-        nodes, warnings = stage('读取当前节点',lambda:read_nodes(config['runtime']),stop,progress)
+        profile = stage('读取当前节点',lambda:read_runtime(config['runtime']),stop,progress)
+        nodes, warnings = profile.nodes, list(profile.warnings)
     except OperationCancelled:raise
     except (OSError, ValueError, TypeError):
         nodes = []
-        warnings.append('无法读取运行配置，请检查路径或手动输入节点')
+        warnings.append('无法读取 Brook 进程，请在高级设置重新检测' if brook_pid(config.get('runtime'))
+                        else '无法读取运行配置，请检查路径或手动输入节点')
+    selected_node = next((n for n in nodes if n.tag==config.get('tag')), None)
+    requires_choice = bool(profile and profile.choose_node and nodes)
+    needs_choice = requires_choice and selected_node is None and not config['manual']
     if config['manual']:
         node = make_node('手动', config['host'], config['port'], config['protocol'], config['transport'])
     else:
-        node = next((n for n in nodes if n.tag==config.get('tag')), nodes[0] if nodes else None)
+        node = selected_node or (nodes[0] if nodes and not needs_choice else None)
     addresses, dns_error = [], ''
     if node:
         try:
@@ -128,18 +174,25 @@ def check(config, stop=None, progress=None):
     defaults.sort(key=lambda r:r['metric']+r['ifmetric'])
     selected=net['selected'] if 'selected' in net else stage('检查 IPv4 / IPv6 系统选路',lambda:selected_routes(addresses,stop),stop,progress)
     rows = inspect_routes(addresses, net, wlan, selected)
-    listener = stage('检查本地代理监听',proxy_listener,stop,progress)
+    ports = proxy_ports(config, profile)
+    listener = stage('检查本地代理监听',lambda:configured_listener(ports, config),stop,progress)
+    local_address = (
+        proxy_address(listener.get('host', '127.0.0.1'), listener.get('port', DEFAULT_PROXY_PORT))
+        if listener else ', '.join(proxy_address('127.0.0.1', port) for port in ports)
+    )
     faults = []
     if not wlan['connected']:
         faults.append('WLAN 已断开')
     elif not wlan['gateway']:
         faults.append('WLAN IPv4 网关缺失')
     if not node:
-        faults.append('未识别代理节点，请手动确认')
+        faults.append('未识别代理节点，请在下拉框选择客户端正在使用的节点' if needs_choice
+                      else '未识别代理节点，请手动确认')
     if dns_error:
         faults.append('节点域名解析失败')
     if not listener:
-        faults.append('127.0.0.1:10808 代理监听不存在')
+        faults.append(f'代理监听不存在：{local_address}' if ports
+                      else '代理监听未配置：请检查配置中的本地 SOCKS5 / 混合监听，或手动指定端口')
     for row in rows:
         if not row['via_wlan']:
             faults.append('节点选路未经过 WLAN：'+row['ip'])
@@ -147,14 +200,33 @@ def check(config, stop=None, progress=None):
             faults.append('节点专用路由缺失或网关不匹配：'+row['ip'])
     return dict(time=timestamp(), nodes=[n.to_dict() for n in nodes], node=node.to_dict() if node else None,
                 warnings=warnings, addresses=addresses, dns_error=dns_error, net=net, wlan=wlan,
-                company=company, defaults=defaults, rows=rows, listener=listener, faults=faults)
+                company=company, defaults=defaults, rows=rows, listener=listener, faults=faults,
+                requires_node_choice=requires_choice, needs_node_choice=needs_choice, local_proxy_address=local_address)
 
 
-def test_proxy(stop=None):
+def test_proxy(stop=None, *, config=None):
     # socks5h lets the proxy resolve HTTPS destination; curl enforces total timeout.
     try:
+        address = proxy_address('127.0.0.1', DEFAULT_PROXY_PORT)
+        if config is not None:
+            profile = None
+            runtime = config.get('runtime')
+            brook = brook_pid(runtime)
+            if runtime and (brook or not port_number(config.get('proxy_port'))):
+                try:
+                    profile = read_runtime(runtime)
+                except (OSError, ValueError, TypeError):
+                    if brook:
+                        raise ValueError('Brook 进程已退出或不可读取，请在高级设置重新检测') from None
+            ports = proxy_ports(config, profile)
+            if not ports:
+                raise ValueError('请核对客户端的 SOCKS5 / 混合监听，或在高级设置指定本地代理端口')
+            listener = configured_listener(ports, config)
+            if listener is None:
+                raise ValueError('请先启动配置中的本地 SOCKS5 / 混合代理监听')
+            address = proxy_address(listener['host'], listener['port'])
         raw = run(['curl.exe', '-q', '--silent', '--show-error', '--fail', '--proxy',
-                   'socks5h://127.0.0.1:10808', '--noproxy', '', '--connect-timeout','5',
+                   f'socks5h://{address}', '--noproxy', '', '--connect-timeout','5',
                    '--max-time','12', '--max-filesize','4096', 'https://api.ipify.org?format=json'], 15, stop)
         ip = str(ipaddress.ip_address(json.loads(raw)['ip']))
         return dict(ok=True, ip=ip, time=timestamp(), message='HTTPS 请求成功；出口公网 IP：'+ip)

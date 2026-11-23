@@ -37,6 +37,31 @@ class QtWindowTests(QtCase):
         self.app.show_report(self.report)
         self.assertEqual(self.app.route_label.text(),'路由异常 / 待检查')
 
+    def test_clash_node_choice_stays_explicit_in_manual_mode_and_on_startup(self):
+        self.app.config['tag'] = '已保存节点'
+        self.assertEqual(self.app.collect()['tag'], '已保存节点')
+
+        report = copy.deepcopy(self.report)
+        report.update(requires_node_choice=True, needs_node_choice=True, node=None,
+                      rows=[], addresses=[], local_proxy_address='127.0.0.1:17890')
+        self.app.show_report(report)
+        self.assertEqual(self.app.route_label.text(), '请选择代理节点')
+        self.assertEqual(self.app.combo.currentData(), '')
+        self.assertIn('127.0.0.1:17890', self.app.listener_label.text())
+        self.assertEqual(self.app.collect()['tag'], '')
+
+        self.app.manual.setChecked(True)
+        self.app.host.setText('203.0.113.10')
+        report.update(needs_node_choice=False, node=dict(self.report['node'], tag='手动'))
+        self.app.show_report(report)
+        self.assertEqual(self.app.collect()['tag'], '')
+        self.assertEqual(self.app.host.text(), '203.0.113.10')
+        self.app.combo.setCurrentIndex(1)
+        with patch.object(self.app, 'do_check'):
+            self.app.select_node(1)
+        self.assertFalse(self.app.manual.isChecked())
+        self.assertEqual(self.app.config['tag'], self.report['node']['tag'])
+
     def test_worker_is_background_and_result_callback_is_main_thread(self):
         threads=[];ready=threading.Event()
         self.app.task('模拟任务',lambda:(threads.append(QThread.currentThread()),ready.wait(.05),7)[-1],
@@ -122,6 +147,21 @@ class QtWindowTests(QtCase):
         picker.detect();self.app.reset_settings()
         jobs[-1](dict(candidates=[],automatic='unexpected.json',notes=[],cancelled=False))
         self.assertEqual(picker.path.text(),self.app.config['runtime'])
+
+    def test_brook_source_survives_detection_save_and_collect(self):
+        picker = self.app.runtime_picker
+        reference = '@brook:123'
+        result = dict(candidates=[dict(path=reference, source='Brook · 客户端进程', pid=123)],
+                      automatic=reference, notes=[], cancelled=False)
+        with patch('guard.config_picker.discover_runtime', return_value=result):
+            picker.start_task = lambda work, done: done(work()) or True
+            picker.detect()
+        self.assertEqual(picker.path.text(), reference)
+        self.assertEqual(self.app.config['runtime'], '')
+        with patch.object(self.app, 'do_check'):
+            self.app.save_settings()
+        self.assertEqual(self.app.collect()['runtime'], reference)
+        self.assertEqual(json.loads((self.data/'settings.json').read_text(encoding='utf-8'))['runtime'], reference)
 
     def test_log_is_plain_text_and_tail_only(self):
         (self.data/'diagnostics.log').write_text('a'*110000+'<img src="file:///private">',encoding='utf-8')

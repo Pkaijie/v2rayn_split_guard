@@ -3,7 +3,7 @@ Qt / PySide6 组件与替换说明
 本程序使用 Qt 6.11.3 的 QtCore、QtGui、QtWidgets、QtSvg 及 PySide6/shiboken6，动态链接。
 原始组件许可文本位于 licenses/Qt；对应版本的原始源代码压缩包随分享包的 sources 目录提供。
 Qt-SOURCES.json 记录来源和文件 SHA-256。本程序没有修改这些第三方库的源代码。
-Fluent System Icons 的原始 MIT 许可另列。Python、psutil、PyInstaller 的许可文本随包提供。
+Fluent System Icons 的原始 MIT 许可另列。Python、psutil、PyInstaller、PyYAML、json5 的许可文本随包提供。
 这些第三方许可与父仓库其他工具的许可相互独立。
 
 允许用户替换、修改和重新链接上述 LGPL 库，并运行替换后的程序；不限制为调试修改后的

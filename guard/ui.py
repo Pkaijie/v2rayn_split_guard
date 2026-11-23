@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (QApplication,QMainWindow,QSystemTrayIcon,QMenu,QM
 from shiboken6 import isValid
 from .common import DATA,DEFAULTS,VERSION,read_json,save_json,setup_log,timestamp
 from .network import check,test_proxy
+from .standalone import brook_pid
 from .routes import plan_routes,preview_text,restore_plan,execute
 from .elevation import elevated_job
 from .notifications import NotificationManager,fault_snapshot
@@ -25,7 +26,7 @@ from .views import build
 
 def fingerprint(report):
     return json.dumps([report['wlan'],report['company'],report['node'],report['addresses'],report['listener'],
-        [(r['ip'],r['chosen'],r['exact']) for r in report['rows']]],sort_keys=True)
+        report.get('local_proxy_address'), [(r['ip'],r['chosen'],r['exact']) for r in report['rows']]],sort_keys=True)
 
 
 class WorkThread(QThread):
@@ -65,9 +66,12 @@ class Application(QMainWindow):
 
     def collect(self):
         cfg=dict(self.config)
-        if cfg.get('runtime'):cfg['runtime']=str(Path(os.path.expandvars(cfg['runtime'])).expanduser().resolve())
+        if cfg.get('runtime') and not brook_pid(cfg['runtime']):
+            cfg['runtime']=str(Path(os.path.expandvars(cfg['runtime'])).expanduser().resolve())
+        selected = self.combo.currentData()
+        tag = cfg.get('tag', '') if selected is None else selected
         cfg.update(manual=self.manual.isChecked(),host=self.host.text().strip(),port=self.port.value(),
-            protocol=self.protocol.text().strip(),transport=self.transport.currentText(),tag=self.combo.currentText(),
+            protocol=self.protocol.text().strip(),transport=self.transport.currentText(),tag=tag,
             interval=self.interval.value(),auto_proxy=self.auto_proxy.isChecked())
         if cfg['manual']:
             from .nodes import make_node
@@ -153,11 +157,23 @@ class Application(QMainWindow):
                 notices.append('解析变化：新增 '+(', '.join(sorted(added)) or '无')+'；失效 '+(', '.join(sorted(gone)) or '无')+'。旧路由仅可在管理范围内清理。')
                 changes.append(('change.dns','节点解析地址变化',notices[-1]))
         self.report=report;self.last_check=time.monotonic()
-        self.combo.blockSignals(True);self.combo.clear();self.combo.addItems([n['tag'] for n in report['nodes']] or ['未识别出站'])
+        self.combo.blockSignals(True);self.combo.clear()
+        if report.get('requires_node_choice'):
+            self.combo.addItem('请选择客户端使用的节点', '')
+        for candidate in report['nodes']:
+            self.combo.addItem(candidate['tag'], candidate['tag'])
+        if not report['nodes']:
+            self.combo.addItem('未识别出站')
         node=report['node']
         if node and not self.manual.isChecked():
-            self.combo.setCurrentText(node['tag']);self.host.setText(node['host']);self.port.setValue(node['port'])
+            self.combo.setCurrentIndex(self.combo.findData(node['tag']));self.host.setText(node['host']);self.port.setValue(node['port'])
             self.protocol.setText(node['protocol']);self.transport.setCurrentText(node['transport'])
+        elif self.manual.isChecked() and report.get('requires_node_choice'):
+            previous = self.combo.findData(self.config.get('tag', ''))
+            self.combo.setCurrentIndex(max(0, previous))
+        elif report.get('needs_node_choice'):
+            self.host.clear()
+            self.protocol.clear()
         self.combo.blockSignals(False)
         wlan=report['wlan'];self.wlan_title.setText(self.config['wlan']+'  /  '+('已连接' if wlan['connected'] else '已断开'))
         set_color(self.wlan_title,GREEN if wlan['connected'] else RED,16,True)
@@ -165,13 +181,20 @@ class Application(QMainWindow):
         self.company_title.setText(self.config['company']+'  /  '+('在线' if report['company'] else '未连接'))
         default=report['defaults'][0]['alias'] if report['defaults'] else '无'
         self.default_label.setText('普通默认路由  '+default+(' · 公司连接未在线' if not report['company'] else ''))
-        self.listener_label.setText('127.0.0.1:10808  /  '+(f'监听中 · PID {report["listener"]["pid"]}' if report['listener'] else '未监听'))
+        listener = report['listener']
+        address = report.get('local_proxy_address', '127.0.0.1:10808')
+        state = f'监听中 · PID {listener["pid"]}' if listener else '未监听'
+        self.listener_label.setText(f'{address}  /  {state}' if address else '未配置本地 SOCKS5 / 混合端口')
         set_color(self.listener_label,GREEN if report['listener'] else RED,12)
         good=bool(report['rows']) and all(r['ok'] for r in report['rows']) and not report['dns_error'] and wlan['connected']
         via=bool(report['rows']) and all(r['via_wlan'] for r in report['rows'])
-        self.route_label.setText('路由分流正常' if good else '专用路由待维护' if via else '路由异常 / 待检查')
-        set_color(self.route_label,GREEN if good else AMBER if via else RED,24,True)
-        detail='节点经 WLAN · 专用路由与网关一致' if good else '选路经 WLAN，请核对专用路由和网关' if via else '请检查网络连接、节点和系统选路'
+        needs_choice = report.get('needs_node_choice')
+        self.route_label.setText('请选择代理节点' if needs_choice else '路由分流正常' if good else '专用路由待维护' if via else '路由异常 / 待检查')
+        set_color(self.route_label,GREEN if good else AMBER if via or needs_choice else RED,24,True)
+        if needs_choice:
+            detail = '请选择代理客户端当前使用的第一跳'
+        else:
+            detail = '节点经 WLAN · 专用路由与网关一致' if good else '选路经 WLAN，请核对专用路由和网关' if via else '请检查网络连接、节点和系统选路'
         self.route_detail.setText(detail+'\n'+report['time']);self.route_count.setText(f'{len(report["rows"])} 个目标 / IPv4 + IPv6')
         self.table.set_rows(report['rows'])
         hints=list(report['warnings'])+([node['warning']] if node and node['warning'] else [])
@@ -203,7 +226,8 @@ class Application(QMainWindow):
         if not self.closing:self.show_window();self.notifications.show_details()
 
     def do_proxy(self,*,automatic=False):
-        self.task('通过 SOCKS5h 测试 HTTPS',lambda:test_proxy(self.stop),lambda result:self.show_proxy(result,automatic=automatic))
+        config = dict(self.config)
+        self.task('通过 SOCKS5h 测试 HTTPS',lambda:test_proxy(self.stop,config=config),lambda result:self.show_proxy(result,automatic=automatic))
 
     def show_proxy(self,result,*,automatic=False):
         self.proxy=result;self.last_proxy=time.monotonic()
@@ -287,8 +311,9 @@ class Application(QMainWindow):
     def route_done(self,result):
         changed=result.get('route_changed',True)
         if changed:self.invalidate('路由操作已完成')
-        self.text_window('路由操作结果',result['message']+('\n\n备份：'+result['backup'] if result.get('backup') else ''))
-        self.log.info('路由操作 %s backup=%s',result['message'],result.get('backup'))
+        backup = result.get('backup')
+        self.text_window('路由操作结果',result['message']+('\n\n备份：'+backup if backup else ''))
+        self.log.info('路由操作 %s backup=%s',result['message'],Path(backup).name if backup else '')
         self.refresh_backups()
         if changed:self.do_check()
         else:self.last_check=time.monotonic()
@@ -332,6 +357,7 @@ class Application(QMainWindow):
 
     def reset_settings(self):
         self.runtime_picker.reset(str(self.config.get('runtime','')))
+        self.proxy_port.setValue(int(self.config.get('proxy_port', 0)))
         for key,field in self.settings_fields.items():
             if key=='cooldown':field.setValue(int(self.config[key]))
             else:field.setText(str(self.config.get(key,'')))
@@ -348,11 +374,19 @@ class Application(QMainWindow):
                     address=ipaddress.ip_address(changes[key])
                     if address.is_unspecified or address.is_multicast or address.version!=(6 if key=='gateway6' else 4):raise ValueError('网关地址不正确')
             runtime=self.runtime_picker.path.text().strip()
-            changes.update(runtime=str(Path(os.path.expandvars(runtime)).expanduser().resolve()) if runtime else '',
+            if runtime and not brook_pid(runtime):
+                runtime = str(Path(os.path.expandvars(runtime)).expanduser().resolve())
+            changes.update(runtime=runtime,
+                           proxy_port=self.proxy_port.value(),
                            close_action=CLOSE_CHOICES[self.close_action_menu.currentText()])
+            runtime_changed = changes['runtime'] != self.config.get('runtime', '')
+            if runtime_changed:
+                changes['tag'] = ''
             updated=dict(self.config,**changes);save_json(self.data/'settings.json',updated)
         except (ValueError,OSError) as error:self.error('设置不正确',str(error));return
         self.config=updated;self.notifications.state.cooldown=updated['cooldown'];self.settings_hint.setText('设置已保存。未修改任何路由。')
+        if runtime_changed:
+            self.combo.clear()
         self.invalidate('设置已变化');self.do_check()
 
     def about(self):

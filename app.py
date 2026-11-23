@@ -64,7 +64,7 @@ def main():
         from guard.privacy import public_diagnostic
         config=dict(DEFAULTS,**(read_json(DATA/'settings.json',{}) or {}))
         r=check(config)
-        if args.proxy_test:r['proxy_test']=test_proxy()
+        if args.proxy_test:r['proxy_test']=test_proxy(config=config)
         r=public_diagnostic(r)
         if args.output:save_json(args.output,r)
         if sys.stdout is not None:

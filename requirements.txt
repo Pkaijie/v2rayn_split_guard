@@ -1,2 +1,4 @@
 psutil>=7,<8
 PySide6==6.11.3
+PyYAML>=6.0.3,<7
+json5>=0.12,<1
